@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<!-- Everything comes from this site: no fonts, scripts, analytics or packages from any other server. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="description" content="Convert IFC pipe networks to georeferenced DXF in your browser. Your files never leave your computer.">
+<title>IFC2DXF – IFC pipe network to georeferenced DXF</title>
+<link rel="stylesheet" href="css/app.css">
+<script src="js/theme.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="brand">
+    <h1>IFC2DXF</h1>
+    <p class="tagline">IFC pipe network to georeferenced DXF – in your browser</p>
+  </div>
+  <div class="top-actions">
+    <span id="engine" class="chip" role="status" aria-live="polite">
+      <span class="i i-loader spin" aria-hidden="true"></span><span id="engine-text">Preparing the converter…</span>
+    </span>
+    <button id="theme" class="icon-btn" type="button" aria-pressed="false">
+      <span class="i i-moon" aria-hidden="true"></span><span class="sr-only">Dark mode</span>
+    </button>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+  <!-- 1. IFC -->
+  <section class="card" aria-labelledby="h1-ifc">
+    <h2 id="h1-ifc"><span class="step" aria-hidden="true">1</span> IFC file</h2>
+    <label id="drop" class="drop" for="file-input">
+      <span class="i i-file-up big" aria-hidden="true"></span>
+      <span class="drop-main">Drop an <strong>.ifc</strong> file here, or <u>choose a file</u></span>
+      <span class="drop-sub">It is read on this computer only. Nothing is uploaded.</span>
+      <input id="file-input" class="sr-only" type="file" accept=".ifc">
+    </label>
+    <p id="file-info" class="file-info" hidden>
+      <span class="i i-file-text" aria-hidden="true"></span><span id="file-name"></span>
+    </p>
+  </section>
+
+  <!-- 2. AI (optional) -->
+  <section class="card" aria-labelledby="h2-ai">
+    <h2 id="h2-ai"><span class="step" aria-hidden="true">2</span> AI analysis <span class="optional">optional</span></h2>
+    <p class="help">Claude can read a summary of the IFC and tell the converter which properties hold the diameters,
+      levels and systems. Without it the converter works in automatic mode.</p>
+    <ol class="ai-steps">
+      <li>
+        <a id="open-claude" class="btn secondary" href="https://claude.ai/login" target="_blank" rel="noopener noreferrer">
+          <img id="claude-logo" class="logo" src="assets/claude.png" alt="" hidden>
+          <span id="claude-fallback" class="i i-chat" aria-hidden="true"></span>
+          <span>Open Claude</span><span class="sr-only"> (opens in a new tab)</span>
+          <span class="i i-external small" aria-hidden="true"></span>
+        </a>
+        <span class="help">Log in if asked.</span>
+      </li>
+      <li>
+        <button id="copy-prompt" class="btn secondary" type="button" disabled>
+          <span class="i i-copy" aria-hidden="true"></span><span>Copy prompt</span>
+        </button>
+        <span class="help">Paste it into the chat (Ctrl+V) and send it. The summary contains no personal data.</span>
+      </li>
+      <li>
+        <label class="btn secondary" id="ai-label" for="ai-input" aria-disabled="true">
+          <span class="i i-json" aria-hidden="true"></span><span>Load AI response</span>
+          <input id="ai-input" class="sr-only" type="file" accept=".json,.txt,application/json,text/plain" disabled>
+        </label>
+        <span class="help">Save Claude's answer as a .json file and load it here.</span>
+      </li>
+    </ol>
+    <div id="prompt-box" class="prompt-box" hidden>
+      <p>Your browser did not allow copying automatically. Select the text below or press the button.</p>
+      <textarea id="prompt-text" rows="6" readonly aria-label="Prompt for Claude"></textarea>
+      <button id="prompt-copy-again" class="btn secondary" type="button">
+        <span class="i i-copy" aria-hidden="true"></span><span>Copy to clipboard</span>
+      </button>
+    </div>
+    <p id="ai-state" class="ai-state">No AI analysis loaded – automatic mode.</p>
+    <button id="ai-remove" class="btn ghost" type="button" hidden>
+      <span class="i i-trash" aria-hidden="true"></span><span>Remove AI analysis</span>
+    </button>
+    <details id="ai-details" class="details" hidden>
+      <summary>How the AI response was read</summary>
+      <pre id="ai-reading"></pre>
+    </details>
+  </section>
+
+  <!-- 3. Options -->
+  <section class="card" aria-labelledby="h3-opt">
+    <h2 id="h3-opt"><span class="step" aria-hidden="true">3</span> Options</h2>
+    <fieldset class="options">
+      <legend class="sr-only">Conversion options (defaults of IFC2DXF 0.4.0)</legend>
+      <label class="check"><input type="checkbox" id="o-axes_3d"> 3D axes with real elevation
+        <span class="help">Off: 2D axes at Z = 0, invert levels written as text.</span></label>
+      <label class="check"><input type="checkbox" id="o-data_texts" checked> Include data texts (diameter, material, levels,
+        IDs) on layer DATA
+        <span class="help">Electrical discipline: labels are not recommended, please untick this option.</span></label>
+      <label class="check"><input type="checkbox" id="o-manholes_as_blocks" checked> Manholes as blocks with attributes
+        <span class="help">Off: outlines and plain text.</span></label>
+      <label class="check"><input type="checkbox" id="o-layers_per_system" checked> Separate systems into layers
+        <span class="help">Off: one set of layers for everything.</span></label>
+      <label class="check"><input type="checkbox" id="o-declutter" checked> Avoid overlapping data texts
+        <span class="help">Moves pipe labels and level texts, with leader lines; stops after 60 s.</span></label>
+      <label class="check"><input type="checkbox" id="o-short_labels"> Short pipe labels
+        <span class="help">PE, PVC, DI, DW instead of the full material name.</span></label>
+      <div class="selects">
+        <label>Text height (m)
+          <select id="o-text_height"><option>0.25</option><option selected>0.5</option><option>1.0</option><option>2.0</option></select>
+          <span class="help">0.5 m suits 1:500 plans.</span></label>
+        <label>Data text size
+          <select id="o-data_text_scale"><option>1.0</option><option>0.75</option><option>0.6</option><option>0.5</option></select>
+          <span class="help">Pipe labels and level texts only.</span></label>
+      </div>
+      <label class="check experimental"><input type="checkbox" id="o-write_geodata"> Write AutoCAD geolocation
+        object (experimental – may misplace the drawing)
+        <span class="help">Leave it off: assign the coordinate system in AutoCAD instead.</span></label>
+      <label class="name">DXF file name
+        <input type="text" id="out-name" autocomplete="off" spellcheck="false"></label>
+      <button id="reset-options" class="btn ghost" type="button">Restore defaults</button>
+    </fieldset>
+  </section>
+
+  <!-- 4. Convert -->
+  <section class="card" aria-labelledby="h4-run" id="run-card">
+    <h2 id="h4-run"><span class="step" aria-hidden="true">4</span> Convert</h2>
+    <div class="run-row">
+      <button id="convert" class="btn primary" type="button" disabled>
+        <span class="i i-play" aria-hidden="true"></span><span>Convert to DXF</span>
+      </button>
+      <button id="cancel" class="btn ghost" type="button" disabled>
+        <span class="i i-x" aria-hidden="true"></span><span>Cancel</span>
+      </button>
+    </div>
+    <progress id="bar" max="100" value="0" aria-labelledby="status"></progress>
+    <p id="status" class="status" role="status" aria-live="polite">Choose an IFC file to start.</p>
+
+    <div id="result" class="result" hidden tabindex="-1" aria-labelledby="h-result">
+      <h3 id="h-result">Result</h3>
+      <p id="engine-warning" class="badge bad" hidden></p>
+      <p id="badge" class="badge"></p>
+      <ul id="summary" class="summary"></ul>
+      <div id="downloads" class="downloads"></div>
+      <details class="details">
+        <summary>Full conversion report</summary>
+        <pre id="report"></pre>
+      </details>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p><strong>Your files never leave your computer.</strong> The conversion runs inside this browser tab; nothing is
+    uploaded and nothing is stored.</p>
+  <p>IFC2DXF web <span id="app-version"></span> · conversion engine ifc2dxf <span id="engine-version">0.4.0</span> ·
+    <a href="licences.html">Licences and third-party software</a></p>
+</footer>
+<script src="js/app.js"></script>
+</body>
+</html>
