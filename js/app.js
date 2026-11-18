@@ -11,6 +11,8 @@ let file = null;            // the chosen IFC (File)
 let ai = null;              // {name, bytes} of the loaded AI response, re-sent after a restart
 let pending = null;         // action requested before the converter was ready
 let running = null;         // command the user is waiting for: "prompt" | "loadAI" | "convert"
+let engineError = null;     // why the converter could not start (shown instead of waiting forever)
+let outputs = {};           // name -> Blob of the last conversion
 const blobUrls = [];
 
 // ------------------------------------------------------------------ helpers
@@ -43,12 +45,21 @@ function setBusy(b) {
 function icon(name) { const s = document.createElement("span"); s.className = "i i-" + name; s.setAttribute("aria-hidden", "true"); return s; }
 
 // ------------------------------------------------------------------ worker
+function engineFailed(msg) {
+  engineError = msg;
+  pending = null;
+  setEngine("failed", "The converter could not start");
+  setBusy(false); $("bar").value = 0;
+  setStatus(`The converter could not start: ${msg}. Reload the page to try again; if it keeps failing, ` +
+            "your browser or network may be blocking part of the site.");
+}
+
 function startWorker() {
-  ready = false;
+  ready = false; engineError = null;
   setEngine("loading", "Preparing the converter… (first visit: about 36 MB)");
   worker = new Worker("js/worker.js");
   worker.onmessage = (ev) => onMessage(ev.data);
-  worker.onerror = (ev) => { setEngine("failed", "The converter could not start"); setStatus("Error: " + ev.message); setBusy(false); };
+  worker.onerror = (ev) => engineFailed(ev.message || "the converter script did not load");
   worker.postMessage({ cmd: "init" });
 }
 
@@ -88,8 +99,8 @@ function onMessage(m) {
     case "aiCleared": break;
     case "done": onDone(m); break;
     case "error":
+      if (m.cmd === "init") { engineFailed(m.msg); break; }
       setBusy(false); $("bar").value = 0;
-      if (m.cmd === "init") setEngine("failed", "The converter could not start");
       setStatus("Error: " + m.msg);
       break;
   }
@@ -98,6 +109,10 @@ function onMessage(m) {
 // run an action now, or as soon as the converter is ready
 function whenReady(action, waitingMsg) {
   if (ready) return action();
+  if (engineError) {
+    setStatus(`Not possible: the converter could not start (${engineError}). Reload the page to try again.`);
+    return;
+  }
   pending = action;
   setBusy(true);
   setStatus(waitingMsg + " It will start as soon as the converter is ready.");
@@ -241,21 +256,76 @@ function onDone(m) {
   renderBadge(r.georef);
   renderSummary(r, m.seconds);
   const dl = $("downloads"); dl.replaceChildren();
+  outputs = {};
+  if (window.showDirectoryPicker) {     // Edge / Chrome: write all files into a folder the user chooses
+    const all = document.createElement("button");
+    all.type = "button"; all.className = "btn primary";
+    all.append(icon("download"), document.createTextNode("Save all to a folder…"));
+    all.addEventListener("click", saveAllToFolder);
+    dl.append(all);
+  }
   for (const [name, bytes] of Object.entries(m.files)) {
     const isDxf = /\.dxf$/i.test(name);
-    const url = URL.createObjectURL(new Blob([bytes], { type: isDxf ? "application/dxf" : "text/plain" }));
+    const blob = new Blob([bytes], { type: isDxf ? "application/dxf" : "text/plain" });
+    outputs[name] = blob;
+    const url = URL.createObjectURL(blob);
     blobUrls.push(url);
     const a = document.createElement("a");
-    a.className = "btn " + (isDxf ? "primary" : "secondary");
+    a.className = "btn " + (isDxf && !window.showDirectoryPicker ? "primary" : "secondary");
     a.href = url; a.download = name;
-    a.append(icon("download"), document.createTextNode(isDxf ? `Download DXF (${name})` : `Download ${name}`));
+    a.append(icon("download"), document.createTextNode(isDxf ? `Save DXF (${name})` : `Save ${name}`));
+    if (window.showSaveFilePicker) {    // ask where to save; plain download (Downloads folder) as fallback
+      a.addEventListener("click", (e) => { e.preventDefault(); saveOne(name); });
+    }
     dl.append(a);
   }
+  const hint = document.createElement("p");
+  hint.className = "help";
+  hint.textContent = window.showSaveFilePicker
+    ? "You choose the folder and name in the Save window."
+    : "This browser saves to your Downloads folder (change it in the browser's download settings).";
+  dl.append(hint);
   $("report").textContent = r.report;
   $("result").hidden = false;
   const miss = r.missing.length ? ` Warning: ${r.missing.length} element(s) missing or drawn from their axis only.` : "";
-  setStatus(`Done in ${m.seconds.toFixed(0)} s. The DXF is ready to download.` + miss);
+  setStatus(`Done in ${m.seconds.toFixed(0)} s. The DXF is ready to save.` + miss);
   $("result").focus();
+}
+
+async function writeBlob(handle, blob) {
+  const w = await handle.createWritable();
+  await w.write(blob);
+  await w.close();
+}
+async function saveOne(name) {
+  const ext = name.slice(name.lastIndexOf("."));
+  try {
+    const handle = await window.showSaveFilePicker({ suggestedName: name, id: "ifc2dxf-out",
+      types: [{ description: ext === ".dxf" ? "DXF drawing" : "Text file", accept: { [ext === ".dxf" ? "application/dxf" : "text/plain"]: [ext] } }] });
+    await writeBlob(handle, outputs[name]);
+    setStatus(`Saved ${handle.name}.`);
+  } catch (e) {
+    if (e.name !== "AbortError") setStatus(`Could not save ${name}: ${e.message}`);
+  }
+}
+async function saveAllToFolder() {
+  let dir;
+  try { dir = await window.showDirectoryPicker({ id: "ifc2dxf-out", mode: "readwrite" }); }
+  catch (e) { if (e.name !== "AbortError") setStatus("Could not open the folder: " + e.message); return; }
+  const names = Object.keys(outputs), existing = [];
+  for (const n of names) {
+    try { await dir.getFileHandle(n); existing.push(n); } catch (e) { /* not there: fine */ }
+  }
+  if (existing.length && !confirm(`These files already exist in "${dir.name}":\n\n${existing.join("\n")}\n\nOverwrite them?`)) {
+    setStatus("Nothing saved: the existing files were kept.");
+    return;
+  }
+  try {
+    for (const n of names) await writeBlob(await dir.getFileHandle(n, { create: true }), outputs[n]);
+    setStatus(`Saved ${names.length} files to the folder "${dir.name}".`);
+  } catch (e) {
+    setStatus("Could not save to that folder: " + e.message);
+  }
 }
 
 function renderBadge(g) {
