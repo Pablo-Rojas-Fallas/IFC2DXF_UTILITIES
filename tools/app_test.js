@@ -40,9 +40,13 @@ async function run() {
   check("footer: version shown", /\d+\.\d+\.\d+/.test($("app-version").textContent), $("app-version").textContent);
   check("licences link", !!d.querySelector('a[href="licences.html"]'));
   check("Open Claude link", $("open-claude").href === "https://claude.ai/login" && $("open-claude").target === "_blank");
-  check("Claude logo: fallback icon shown when assets/claude.png is missing",
-        await waitFor(() => !d.getElementById("claude-logo") || !$("claude-fallback").hidden, 5) !== null,
-        d.getElementById("claude-logo") ? "logo present" : "fallback icon");
+  const shown = await waitFor(() => {
+    const logo = d.getElementById("claude-logo");
+    if (logo && !logo.hidden && logo.naturalWidth > 0 && $("claude-fallback").hidden) return "assets/claude.png shown";
+    if (!logo && !$("claude-fallback").hidden) return "no assets/claude.png: fallback chat icon shown";
+    return null;
+  }, 5);
+  check("Open Claude button: logo, or fallback icon when the logo file is missing", shown, shown || "neither shown");
   check("buttons disabled before a file is chosen", $("convert").disabled && $("copy-prompt").disabled);
 
   // converter loads in the background
