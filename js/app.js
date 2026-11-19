@@ -7,12 +7,16 @@ const OPTION_IDS = ["axes_3d", "data_texts", "manholes_as_blocks", "layers_per_s
                     "write_geodata", "text_height", "data_text_scale"];
 
 let worker = null, ready = false, busy = false, defaults = null, versions = null;
+let fileLoaded = false;     // the chosen IFC has reached the worker (its "fileSet" reply arrived)
+let fileAnnounce = false;   // show the "IFC ready" messages when that reply arrives (not after a silent re-send)
 let file = null;            // the chosen IFC (File)
 let ai = null;              // {name, bytes} of the loaded AI response, re-sent after a restart
 let pending = null;         // action requested before the converter was ready
-let running = null;         // command the user is waiting for: "prompt" | "loadAI" | "convert"
+let running = null;         // command the user is waiting for: "prompt" | "loadAI" | "convert" | "boq"
 let engineError = null;     // why the converter could not start (shown instead of waiting forever)
 let outputs = {};           // name -> Blob of the last conversion
+let boqData = null;         // parsed BOQ data of the current IFC (shown in the iframe, used for the HTML download)
+let boqFrameReady = false;  // the dashboard iframe has posted boq-ready
 const blobUrls = [];
 
 // ------------------------------------------------------------------ helpers
@@ -26,8 +30,10 @@ function setEngine(state, msg) {
   $("engine-text").textContent = msg;
 }
 function updateButtons() {
-  const canUse = !!file && !busy;
+  const canUse = !!file && fileLoaded && !busy;
   $("convert").disabled = !canUse;
+  $("boq-run").disabled = !canUse || !ready;
+  $("boq-download").disabled = busy;
   $("copy-prompt").disabled = !canUse;
   $("ai-input").disabled = busy;
   $("ai-label").setAttribute("aria-disabled", String(busy));
@@ -49,13 +55,13 @@ function engineFailed(msg) {
   engineError = msg;
   pending = null;
   setEngine("failed", "The converter could not start");
-  setBusy(false); $("bar").value = 0;
+  setBusy(false); $("bar").value = 0; boqProgressEnd();
   setStatus(`The converter could not start: ${msg}. Reload the page to try again; if it keeps failing, ` +
             "your browser or network may be blocking part of the site.");
 }
 
 function startWorker() {
-  ready = false; engineError = null;
+  ready = false; engineError = null; fileLoaded = false;
   setEngine("loading", "Preparing the converter… (first visit: about 36 MB)");
   worker = new Worker("js/worker.js");
   worker.onmessage = (ev) => onMessage(ev.data);
@@ -78,6 +84,7 @@ function onMessage(m) {
     case "ready": {
       ready = true; defaults = m.defaults; versions = m.versions;
       setEngine("ready", "Converter ready");
+      updateButtons();
       if (!$("o-data_texts").dataset.init) applyOptions(defaults);
       (async () => {
         if (file) await sendFile();
@@ -86,12 +93,23 @@ function onMessage(m) {
       })();
       break;
     }
-    case "fileSet": break;
+    case "fileSet":
+      if (!file || m.name !== file.name) break;     // reply for a file that has since been replaced
+      fileLoaded = true;
+      if (fileAnnounce) {
+        fileAnnounce = false;
+        setBoqStatus("Press BOQ Dashboard to read the quantities.");
+        setStatus("IFC selected. Optionally run the AI analysis, check the options and press Generate DXF.");
+      }
+      updateButtons();
+      break;
     case "progress":
+      if (running === "boq") { $("boq-bar").removeAttribute("value"); setBoqStatus(m.msg); break; }
       if (m.frac != null) $("bar").value = Math.round(m.frac * 100);
       else $("bar").removeAttribute("value");
       setStatus(m.msg);
       break;
+    case "boq": onBoq(m.json); break;
     case "prompt": onPrompt(m.text); break;
     case "ai":
       if (running === "loadAI") { setBusy(false); onAI(m); }   // re-sent silently after a restart: no message
@@ -100,6 +118,8 @@ function onMessage(m) {
     case "done": onDone(m); break;
     case "error":
       if (m.cmd === "init") { engineFailed(m.msg); break; }
+      if (m.cmd === "setFile") setBoqStatus("The IFC could not be loaded: " + m.msg);
+      if (m.cmd === "boq") { setBusy(false); boqProgressEnd(); setBoqStatus("The BOQ could not be built: " + m.msg); break; }
       setBusy(false); $("bar").value = 0;
       setStatus("Error: " + m.msg);
       break;
@@ -127,7 +147,11 @@ async function pickFile(f) {
   $("file-info").hidden = false;
   $("out-name").value = f.name.replace(/\.ifc$/i, "") + ".dxf";
   $("result").hidden = true; $("bar").value = 0;
-  setStatus("IFC selected. Optionally run the AI analysis, check the options and press Convert to DXF.");
+  clearBoq();
+  fileLoaded = false; fileAnnounce = true;     // the buttons stay grey until the worker has the file
+  const waitMsg = ready ? "Loading the IFC…" : "Loading the IFC… It is passed to the converter as soon as it is ready.";
+  setBoqStatus(waitMsg);
+  setStatus(waitMsg);
   updateButtons();
   if (ready) await sendFile();
 }
@@ -224,10 +248,12 @@ function convert() {
   }, "Conversion requested.");
 }
 function cancel() {
+  const wasBoq = running === "boq";
   worker.terminate();
   pending = null;
-  setBusy(false); $("bar").value = 0;
-  setStatus("Cancelled. No DXF was written. Restarting the converter…");
+  setBusy(false); $("bar").value = 0; boqProgressEnd();
+  if (wasBoq) setBoqStatus("Cancelled. Press BOQ Dashboard to try again.");
+  setStatus(wasBoq ? "Cancelled. Restarting the converter…" : "Cancelled. No DXF was written. Restarting the converter…");
   startWorker();
 }
 
@@ -365,6 +391,86 @@ function renderSummary(r, seconds) {
   li(`Time: ${seconds.toFixed(0)} s.`);
 }
 
+// ------------------------------------------------------------------ 2. BOQ Dashboard
+const boqFrame = $("boq-frame");
+function setBoqStatus(msg) { $("boq-status").textContent = msg; }
+function boqProgressEnd() { $("boq-bar").hidden = true; $("boq-bar").value = 0; }
+function frameOrigin() { return location.origin && location.origin !== "null" ? location.origin : "*"; }
+function postToFrame(msg) { if (boqFrame.contentWindow) boqFrame.contentWindow.postMessage(msg, frameOrigin()); }
+function sendBoqToFrame() {   // only once the viewer has said it is ready; otherwise boq-ready triggers this again
+  if (!boqData || !boqFrameReady) return;
+  postToFrame({ type: "boq-data", data: boqData, theme: currentTheme() });
+  boqFrame.hidden = false; $("boq-empty").hidden = true;
+}
+function clearBoq() {         // new IFC: forget the data and reload an empty viewer
+  boqData = null; boqFrameReady = false;
+  boqFrame.hidden = true; $("boq-empty").hidden = false;
+  boqFrame.src = "boq/viewer.html";
+  $("boq-summary").hidden = true; $("boq-summary").textContent = "";
+  $("boq-download").hidden = true;
+  boqProgressEnd();
+}
+window.addEventListener("message", (ev) => {
+  if (ev.source !== boqFrame.contentWindow || !ev.data || ev.data.type !== "boq-ready") return;
+  boqFrameReady = true;
+  sendBoqToFrame();
+});
+
+function runBoq() {
+  whenReady(() => {
+    setBusy(true); running = "boq";
+    $("boq-bar").hidden = false; $("boq-bar").removeAttribute("value");
+    setBoqStatus("Reading the IFC properties…");
+    worker.postMessage({ cmd: "boq", name: file.name });
+  }, "BOQ requested.");
+}
+
+// Same reading as boq/boq.js: pipes have unit "m" or a pipe word in KEY-A04; manhole parts sharing a ManholeName
+// count once (GlobalId when it is missing); codes are the distinct KEY-A03 values.
+function boqSummary(d) {
+  const clean = (v) => v == null ? null :
+    String(v).replace(/\\X\\0D\\X\\0A/g, " ").replace(/\\X\\0[AD]\\/g, " ").replace(/\s+/g, " ").trim();
+  let pipeM = 0, segments = 0;
+  const manholes = new Set(), codes = new Set();
+  for (const e of d.elements) {
+    const u = clean(e.u), a4 = clean(e.a4) || "";
+    codes.add(clean(e.a3));
+    if (u === "m" || /ledning|pipe|rør/i.test(a4)) { pipeM += parseFloat(e.q) || 0; segments++; }
+    else manholes.add(clean(e.mh) || e.g);
+  }
+  return { pipeM, segments, manholes: manholes.size, codes: codes.size };
+}
+
+function onBoq(json) {
+  setBusy(false); boqProgressEnd();
+  try { boqData = JSON.parse(json); }
+  catch (e) { boqData = null; setBoqStatus("The BOQ data could not be read: " + e.message); return; }
+  const s = boqSummary(boqData);
+  const nf1 = new Intl.NumberFormat("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  $("boq-summary").textContent = `${nf1.format(s.pipeM)} m of pipe (${s.segments} segments) · ${s.manholes} manholes · ` +
+                                 `${s.codes} codes`;
+  $("boq-summary").hidden = false;
+  $("boq-download").hidden = false;
+  setBoqStatus(boqData.elements.length ? "BOQ ready: see the dashboard." :
+               "No elements with a BOQ code (KEY-A03) were found in this IFC.");
+  sendBoqToFrame();
+}
+
+async function downloadBoq() {
+  if (!boqData) return;
+  try {
+    const html = await window.BOQStandalone.build(boqData);
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = "BOQ_" + (file ? file.name : boqData.file || "model").replace(/\.ifc$/i, "") + ".html";
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setBoqStatus(`Saved ${a.download}.`);
+  } catch (e) {
+    setBoqStatus("Could not build the HTML file: " + e.message);
+  }
+}
+
 // ------------------------------------------------------------------ theme
 function currentTheme() {
   return document.documentElement.dataset.theme ||
@@ -383,8 +489,12 @@ $("theme").addEventListener("click", () => {
   document.documentElement.dataset.theme = next;
   try { localStorage.setItem("ifc2dxf-theme", next); } catch (e) { /* not stored: fine */ }
   showThemeButton();
+  postToFrame({ type: "boq-theme", theme: next });
 });
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", showThemeButton);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  showThemeButton();
+  postToFrame({ type: "boq-theme", theme: currentTheme() });
+});
 
 // ------------------------------------------------------------------ wiring
 $("file-input").addEventListener("change", (e) => pickFile(e.target.files[0]));
@@ -403,6 +513,8 @@ $("ai-input").addEventListener("change", (e) => loadAI(e.target.files[0]));
 $("ai-remove").addEventListener("click", removeAI);
 $("reset-options").addEventListener("click", () => { if (defaults) { applyOptions(defaults); setStatus("Options restored to the defaults."); } });
 $("convert").addEventListener("click", convert);
+$("boq-run").addEventListener("click", runBoq);
+$("boq-download").addEventListener("click", downloadBoq);
 $("cancel").addEventListener("click", cancel);
 // the Claude logo is shown only if the site owner placed assets/claude.png; otherwise the chat icon stays
 const logo = $("claude-logo");

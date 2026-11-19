@@ -142,3 +142,31 @@ table.lic th, table.lic td { border-bottom: 1px solid var(--line); padding: .45r
 code { font-family: ui-monospace, Consolas, monospace; font-size: .9em; }
 .foot { max-width: 1080px; margin: 0 auto; padding: 1rem 1rem 2rem; color: var(--muted); font-size: .9rem; }
 .foot strong { color: var(--text); }
+
+/* App page: steps in a left sidebar that scrolls on its own, BOQ Dashboard in the main panel */
+.app-page { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+.app-page .top, .app-page .foot { max-width: none; width: 100%; }
+.app-page .top { padding-bottom: .75rem; }
+.app-page .foot { padding: .5rem 1rem .75rem; }
+.app-page .foot p { margin: .15rem 0; }
+main.app { max-width: none; width: 100%; flex: 1 1 auto; min-height: 0; padding: 0 1rem;
+           display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 1rem; }
+.sidebar { min-height: 0; overflow-y: auto; display: grid; gap: 1rem; align-content: start; padding: 0 .25rem .25rem 0;
+           overscroll-behavior: contain; }
+.viewer { position: relative; min-height: 0; min-width: 0; background: var(--card); border: 1px solid var(--line);
+          border-radius: var(--radius); overflow: hidden; }
+#boq-frame { display: block; width: 100%; height: 100%; border: 0; }
+.boq-empty { position: absolute; inset: 0; margin: 0; display: grid; place-items: center; padding: 2rem;
+             text-align: center; color: var(--muted); font-size: 1.05rem; }
+.boq-summary { margin: .5rem 0 0; font-weight: 600; overflow-wrap: anywhere; }
+#boq-card progress { margin: .75rem 0 .4rem; }
+#boq-card .status { margin-top: .5rem; }
+.ai-section { border: 1px solid var(--line); border-radius: 10px; padding: .4rem .8rem; margin: 0 0 1rem; }
+.ai-section > summary { cursor: pointer; font-weight: 600; padding: .3rem 0; }
+.ai-section[open] > summary { margin-bottom: .4rem; }
+@media (max-width: 900px) {
+  .app-page { height: auto; display: block; }
+  main.app { display: block; padding: 0 1rem; }
+  .sidebar { overflow: visible; padding: 0; margin-bottom: 1rem; }
+  .viewer { height: 85vh; min-height: 30rem; }
+}

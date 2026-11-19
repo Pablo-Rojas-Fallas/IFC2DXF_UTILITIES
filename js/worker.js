@@ -12,7 +12,7 @@ const PYODIDE_PACKAGES = ["numpy", "shapely", "pyproj", "micropip", "packaging",
 const EXTRA_WHEELS = ["ifcopenshell-0.8.4-cp313-cp313-pyodide_2025_0_wasm32.whl", "ezdxf-1.4.5-py3-none-any.whl",
                       "json_repair-0.64.9-py3-none-any.whl", "isodate-0.7.2-py3-none-any.whl",
                       "lark-1.3.1-py3-none-any.whl"];
-const PY_FILES = ["__init__.py", "analysis.py", "classify.py", "dxf_writer.py", "geometry.py", "georef.py",
+const PY_FILES = ["__init__.py", "analysis.py", "boq.py", "classify.py", "dxf_writer.py", "geometry.py", "georef.py",
                   "ifc_reader.py", "label_layout.py", "pipeline.py", "prompt.py", "report.py", "schema.py",
                   "summary.py"];
 
@@ -29,6 +29,7 @@ from ifc2dxf.pipeline import Options, convert as _convert
 from ifc2dxf.prompt import build as _build_prompt
 from ifc2dxf.report import report_text
 from ifc2dxf.summary import generate as _summary
+from ifc2dxf.boq import generate as _boq
 
 ANALYSIS = None
 WORK = "/work"
@@ -45,6 +46,9 @@ def web_info():
 
 def web_prompt(path, progress):
     return _build_prompt(_summary(path, progress=lambda f, m: progress(m)))
+
+def web_boq(path, progress):
+    return _boq(path, progress=lambda m: progress(m))
 
 def web_load_ai(path):
     global ANALYSIS
@@ -104,6 +108,10 @@ async function init() {
   py = await loadPyodide({ indexURL: ROOT + "vendor/pyodide/" });
   post("loading", { msg: "Loading the geometry libraries…" });
   await py.loadPackage(PYODIDE_PACKAGES, { messageCallback: () => {} });
+  for (const f of EXTRA_WHEELS) {       // loadPackage does not fail on a missing file, so check each one first
+    const r = await fetch(ROOT + "vendor/wheels/" + f, { method: "HEAD" });
+    if (!r.ok) throw new Error("Missing file on this site: vendor/wheels/" + f);
+  }
   await py.loadPackage(EXTRA_WHEELS.map((f) => ROOT + "vendor/wheels/" + f), { messageCallback: () => {} });
   post("loading", { msg: "Loading the converter…" });
   py.FS.mkdirTree("/home/pyodide/ifc2dxf");
@@ -134,6 +142,11 @@ const handlers = {
   async prompt(m) {
     const text = glue.get("web_prompt")("/work/" + m.name, (msg) => post("progress", { frac: null, msg }));
     post("prompt", { text });
+  },
+  async boq(m) {
+    post("progress", { frac: null, msg: "Opening the IFC for the BOQ…" });
+    const json = glue.get("web_boq")("/work/" + m.name, (msg) => post("progress", { frac: null, msg }));
+    post("boq", { json });
   },
   async loadAI(m) {
     py.FS.writeFile("/work/ai.json", new Uint8Array(m.buffer));
