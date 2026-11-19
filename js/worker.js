@@ -7,7 +7,9 @@ importScripts(ROOT + "vendor/pyodide/pyodide.js");
 
 const PYODIDE_PACKAGES = ["numpy", "shapely", "pyproj", "micropip", "packaging", "pyparsing", "typing-extensions",
                           "fonttools", "python-dateutil"];
-const EXTRA_WHEELS = ["ifcopenshell-0.8.5-cp313-cp313-pyodide_2025_0_wasm32.whl", "ezdxf-1.4.5-py3-none-any.whl",
+// IfcOpenShell 0.8.4: 0.8.5 returns pipe bodies (swept disk solids) mirrored through the origin, and the 0.9 builds
+// do not work in Pyodide yet (see py/CHANGES.md).
+const EXTRA_WHEELS = ["ifcopenshell-0.8.4-cp313-cp313-pyodide_2025_0_wasm32.whl", "ezdxf-1.4.5-py3-none-any.whl",
                       "json_repair-0.64.9-py3-none-any.whl", "isodate-0.7.2-py3-none-any.whl",
                       "lark-1.3.1-py3-none-any.whl"];
 const PY_FILES = ["__init__.py", "analysis.py", "classify.py", "dxf_writer.py", "geometry.py", "georef.py",
@@ -30,25 +32,6 @@ from ifc2dxf.summary import generate as _summary
 
 ANALYSIS = None
 WORK = "/work"
-
-import re
-def web_context_offset(path):
-    """Origin (x, y) of the 3D model context's WorldCoordinateSystem, read from the IFC text, or None when it is
-    0, 0. Known limitation of the browser engine (IfcOpenShell 0.8.5): with a shifted context (e.g. IFCs re-saved
-    by Bonsai with a false origin) the 3D bodies can be misplaced, while the desktop app handles them correctly."""
-    with open(path, "rb") as fh:
-        txt = fh.read().decode("latin-1")
-    for m in re.finditer(r"=\\s*IFCGEOMETRICREPRESENTATIONCONTEXT\\s*\\(([^;]*)\\);", txt, re.I):
-        refs = re.findall(r"#(\\d+)", m.group(1))
-        if not refs:
-            continue
-        a = re.search(r"#%s\\s*=\\s*IFCAXIS2PLACEMENT3D\\s*\\(\\s*#(\\d+)" % refs[0], txt, re.I)
-        p = a and re.search(r"#%s\\s*=\\s*IFCCARTESIANPOINT\\s*\\(\\s*\\(([^)]*)\\)" % a.group(1), txt, re.I)
-        if p:
-            xy = [float(v) for v in p.group(1).split(",")[:2]]
-            if abs(xy[0]) > 1e-6 or abs(xy[1]) > 1e-6:
-                return xy
-    return None
 
 def web_info():
     import numpy, shapely, pyproj, ezdxf
@@ -94,7 +77,6 @@ def web_convert(ifc_path, dxf_path, options_json, progress):
         kinds[kind] += n
     lp = rep.get("label_placement") or {}
     out.update({
-        "context_offset": web_context_offset(ifc_path),
         "files": [os.path.basename(p) for p in [r.dxf_path, *r.extra_paths]],
         "report": report_text(rep) + ("\\n\\n" + an.reading_text(ANALYSIS) if ANALYSIS is not None else ""),
         "georef": None if g is None else {

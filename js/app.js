@@ -241,18 +241,6 @@ function onDone(m) {
     return;
   }
   $("bar").value = 100;
-  const ew = $("engine-warning"); ew.replaceChildren();
-  ew.hidden = !r.context_offset;
-  if (r.context_offset) {   // known limitation of the browser engine (see py/CHANGES.md)
-    const txt = document.createElement("span");
-    txt.append(document.createTextNode("Check this drawing: pipe and manhole outlines may be misplaced."));
-    const small = document.createElement("small");
-    small.textContent = `This IFC places its model at a shifted origin (X ${r.context_offset[0].toLocaleString("en")}, ` +
-      `Y ${r.context_offset[1].toLocaleString("en")}). The browser version cannot yet handle this reliably: compare ` +
-      "the outlines with the axes, or convert this file with the IFC2DXF desktop app.";
-    txt.append(small);
-    ew.append(icon("warn"), txt);
-  }
   renderBadge(r.georef);
   renderSummary(r, m.seconds);
   const dl = $("downloads"); dl.replaceChildren();
@@ -360,13 +348,13 @@ function renderSummary(r, seconds) {
   const parts = Object.entries(names).filter(([key]) => k[key]).map(([key, n]) => `${k[key]} ${n}`);
   li("Converted: " + (parts.join(", ") || "nothing") + ".");
   const lp = r.label_placement;
-  if (lp) {
+  if (!r.data_texts) li("Data texts: off (no labels written).");
+  else if (lp) {
     li(`Labels: ${lp.n} placed – kept ${lp.stayed}, moved ${lp.moved}, with a leader line ${lp.leader}, ` +
        `not resolved ${lp.unresolved}.`, lp.unresolved > 0);
     if (lp.skipped) li(`Label placement stopped after ${lp.budget} s: ${lp.skipped} texts left at their original ` +
                        "position (they may overlap). Try a smaller data text size or short pipe labels.", true);
-  } else if (r.data_texts) li("Label placement: off.");
-  else li("Data texts: off.");
+  } else li("Label placement: off.");
   if (r.missing.length) {
     li(`${r.missing.length} element(s) missing from the DXF or drawn from their axis only (no 3D body in the IFC):`, true);
     for (const [what, who] of r.missing.slice(0, 10)) li(`${who}: ${what}`, true);
