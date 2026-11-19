@@ -26,11 +26,26 @@ def footprint(verts: np.ndarray, faces: np.ndarray, origin: tuple[float, float])
     if len(tri) == 0:
         return None
     polys = shapely.polygons(np.concatenate([tri, tri[:, :1]], axis=1))
-    u = unary_union(polys)
+    u = _union(polys)
     u = u.buffer(0.0005, join_style="mitre").buffer(-0.0005, join_style="mitre").simplify(0.001)  # closes 1 mm gaps
     if u.is_empty:
         return None
     return affinity.translate(u, *origin)
+
+
+def _union(polys):
+    """WEB COPY CHANGE 2: union with a fallback. The browser's shapely 2.0.7 / GEOS 3.12.1 can raise
+    'TopologyException: Ring edge missing' on triangles that almost touch (the desktop's shapely 2.2 does not).
+    Only then the union is repeated with snap-rounding to a 0.001 mm grid, then 0.1 mm; results that succeed at the
+    first try are exactly the desktop ones."""
+    try:
+        return unary_union(polys)
+    except shapely.errors.GEOSException:
+        pass
+    try:
+        return shapely.union_all(polys, grid_size=1e-6)
+    except shapely.errors.GEOSException:
+        return shapely.union_all(polys, grid_size=1e-4)
 
 
 def rings(g):

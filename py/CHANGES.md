@@ -8,6 +8,9 @@ part of it). Two files differ; every change is marked in the code with `WEB COPY
 | 1 | `ifc_reader.py`, `triangulate()` | several threads | one thread | The browser (Pyodide) has no threads. |
 | 2 | `geometry.py`, `footprint()` → `_union()` | `unary_union(triangles)` | same, and only if GEOS raises an error: `union_all(..., grid_size=0.001 mm)`, then 0.1 mm | The browser's shapely 2.0.7 / GEOS 3.12.1 raised "TopologyException: Ring edge missing" on an electrical IFC; outlines that merge without error are identical to the desktop. |
 
+`boq.py` added (web only): reads the BOQ properties (SB_Data KEY-A03/A04/A05, GEN-B03/B04, Novapoint ManholeName) for
+the BOQ Dashboard step. It is not part of desktop IFC2DXF 0.4.0 and is not used by the DXF conversion.
+
 The georeferencing code is unchanged and uses the real **pyproj** (3.7.2, PROJ 9.6.2, full EPSG database).
 
 ## Why IfcOpenShell 0.8.4
