@@ -10,10 +10,13 @@ to other servers: every script, library and icon is served from this repository.
 ## Using it
 
 1. **IFC file** – drop an `.ifc` file or choose one.
-2. **AI analysis (optional)** – *Open Claude*, *Copy prompt* (a summary of the IFC without personal data), paste it
-   into the chat, save the answer as `.json` and *Load AI response*. Without it the converter works in automatic mode.
-3. **Options** – the same options and defaults as desktop IFC2DXF 0.4.0.
-4. **Convert to DXF** – then download the DXF, the `.prj` (coordinate system) and the conversion report.
+2. **BOQ Dashboard** – reads the quantities by V770 code (KEY-A03) from the IFC properties and shows them in the
+   dashboard on the right: pipe length, manholes (parts grouped by ManholeName), codes, roads and a code/description
+   check. *Download HTML* saves the dashboard as a single self-contained file.
+3. **Options** – the same options and defaults as desktop IFC2DXF 0.4.0. At the top, the optional **AI analysis**:
+   *Open Claude*, *Copy prompt* (a summary of the IFC without personal data), paste it into the chat, save the answer
+   as `.json` and *Load AI response*. Without it the converter works in automatic mode.
+4. **Generate DXF** – then download the DXF, the `.prj` (coordinate system) and the conversion report.
 
 The result shows a georeferencing badge: **green** = real map coordinates confirmed (assign the coordinate system in
 AutoCAD without moving anything), **amber** = probably georeferenced, check the report, **red** = local coordinates.
@@ -35,6 +38,7 @@ step is needed.
 | Path | Contents |
 |---|---|
 | `index.html`, `css/`, `js/` | the app (plain HTML, CSS and JavaScript; Python runs in `js/worker.js`) |
+| `boq/` | the BOQ Dashboard viewer (shown in the app in an iframe) and the builder of the downloadable HTML |
 | `py/ifc2dxf/` | the conversion engine: copy of desktop IFC2DXF 0.4.0, differences listed in `py/CHANGES.md` |
 | `vendor/` | Pyodide 0.29.5 and the Python packages (wheels), unmodified |
 | `icons/` | Lucide icons (ISC) |

@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="css/app.css">
 <script src="js/theme.js"></script>
 </head>
-<body>
+<body class="app-page">
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="top">
@@ -30,7 +30,8 @@
   </div>
 </header>
 
-<main id="main" tabindex="-1">
+<main id="main" tabindex="-1" class="app">
+<div class="sidebar">
   <!-- 1. IFC -->
   <section class="card" aria-labelledby="h1-ifc">
     <h2 id="h1-ifc"><span class="step" aria-hidden="true">1</span> IFC file</h2>
@@ -45,55 +46,70 @@
     </p>
   </section>
 
-  <!-- 2. AI (optional) -->
-  <section class="card" aria-labelledby="h2-ai">
-    <h2 id="h2-ai"><span class="step" aria-hidden="true">2</span> AI analysis <span class="optional">optional</span></h2>
-    <p class="help">Claude can read a summary of the IFC and tell the converter which properties hold the diameters,
-      levels and systems. Without it the converter works in automatic mode.</p>
-    <ol class="ai-steps">
-      <li>
-        <a id="open-claude" class="btn secondary" href="https://claude.ai/login" target="_blank" rel="noopener noreferrer">
-          <img id="claude-logo" class="logo" src="assets/claude.png" alt="" hidden>
-          <span id="claude-fallback" class="i i-chat" aria-hidden="true"></span>
-          <span>Open Claude</span><span class="sr-only"> (opens in a new tab)</span>
-          <span class="i i-external small" aria-hidden="true"></span>
-        </a>
-        <span class="help">Log in if asked.</span>
-      </li>
-      <li>
-        <button id="copy-prompt" class="btn secondary" type="button" disabled>
-          <span class="i i-copy" aria-hidden="true"></span><span>Copy prompt</span>
-        </button>
-        <span class="help">Paste it into the chat (Ctrl+V) and send it. The summary contains no personal data.</span>
-      </li>
-      <li>
-        <label class="btn secondary" id="ai-label" for="ai-input" aria-disabled="true">
-          <span class="i i-json" aria-hidden="true"></span><span>Load AI response</span>
-          <input id="ai-input" class="sr-only" type="file" accept=".json,.txt,application/json,text/plain" disabled>
-        </label>
-        <span class="help">Save Claude's answer as a .json file and load it here.</span>
-      </li>
-    </ol>
-    <div id="prompt-box" class="prompt-box" hidden>
-      <p>Your browser did not allow copying automatically. Select the text below or press the button.</p>
-      <textarea id="prompt-text" rows="6" readonly aria-label="Prompt for Claude"></textarea>
-      <button id="prompt-copy-again" class="btn secondary" type="button">
-        <span class="i i-copy" aria-hidden="true"></span><span>Copy to clipboard</span>
+  <!-- 2. BOQ Dashboard -->
+  <section class="card" aria-labelledby="h2-boq" id="boq-card">
+    <h2 id="h2-boq"><span class="step" aria-hidden="true">2</span> BOQ Dashboard</h2>
+    <p class="help">Quantities by V770 code (KEY-A03), read from the IFC properties. The dashboard opens in the main panel.</p>
+    <div class="run-row">
+      <button id="boq-run" class="btn primary" type="button" disabled>
+        <span class="i i-file-text" aria-hidden="true"></span><span>BOQ Dashboard</span>
+      </button>
+      <button id="boq-download" class="btn secondary" type="button" hidden>
+        <span class="i i-download" aria-hidden="true"></span><span>Download HTML</span>
       </button>
     </div>
-    <p id="ai-state" class="ai-state">No AI analysis loaded – automatic mode.</p>
-    <button id="ai-remove" class="btn ghost" type="button" hidden>
-      <span class="i i-trash" aria-hidden="true"></span><span>Remove AI analysis</span>
-    </button>
-    <details id="ai-details" class="details" hidden>
-      <summary>How the AI response was read</summary>
-      <pre id="ai-reading"></pre>
-    </details>
+    <progress id="boq-bar" max="100" value="0" aria-labelledby="boq-status" hidden></progress>
+    <p id="boq-status" class="status" role="status" aria-live="polite">Choose an IFC file first.</p>
+    <p id="boq-summary" class="boq-summary" hidden></p>
   </section>
 
-  <!-- 3. Options -->
+  <!-- 3. Options (AI analysis at the top, optional) -->
   <section class="card" aria-labelledby="h3-opt">
     <h2 id="h3-opt"><span class="step" aria-hidden="true">3</span> Options</h2>
+    <details id="ai-section" class="ai-section">
+      <summary><span id="h2-ai">AI analysis</span> <span class="optional">optional</span></summary>
+      <p class="help">Claude can read a summary of the IFC and tell the converter which properties hold the diameters,
+        levels and systems. Without it the converter works in automatic mode.</p>
+      <ol class="ai-steps">
+        <li>
+          <a id="open-claude" class="btn secondary" href="https://claude.ai/login" target="_blank" rel="noopener noreferrer">
+            <img id="claude-logo" class="logo" src="assets/claude.png" alt="" hidden>
+            <span id="claude-fallback" class="i i-chat" aria-hidden="true"></span>
+            <span>Open Claude</span><span class="sr-only"> (opens in a new tab)</span>
+            <span class="i i-external small" aria-hidden="true"></span>
+          </a>
+          <span class="help">Log in if asked.</span>
+        </li>
+        <li>
+          <button id="copy-prompt" class="btn secondary" type="button" disabled>
+            <span class="i i-copy" aria-hidden="true"></span><span>Copy prompt</span>
+          </button>
+          <span class="help">Paste it into the chat (Ctrl+V) and send it. The summary contains no personal data.</span>
+        </li>
+        <li>
+          <label class="btn secondary" id="ai-label" for="ai-input" aria-disabled="true">
+            <span class="i i-json" aria-hidden="true"></span><span>Load AI response</span>
+            <input id="ai-input" class="sr-only" type="file" accept=".json,.txt,application/json,text/plain" disabled>
+          </label>
+          <span class="help">Save Claude's answer as a .json file and load it here.</span>
+        </li>
+      </ol>
+      <div id="prompt-box" class="prompt-box" hidden>
+        <p>Your browser did not allow copying automatically. Select the text below or press the button.</p>
+        <textarea id="prompt-text" rows="6" readonly aria-label="Prompt for Claude"></textarea>
+        <button id="prompt-copy-again" class="btn secondary" type="button">
+          <span class="i i-copy" aria-hidden="true"></span><span>Copy to clipboard</span>
+        </button>
+      </div>
+      <p id="ai-state" class="ai-state">No AI analysis loaded – automatic mode.</p>
+      <button id="ai-remove" class="btn ghost" type="button" hidden>
+        <span class="i i-trash" aria-hidden="true"></span><span>Remove AI analysis</span>
+      </button>
+      <details id="ai-details" class="details" hidden>
+        <summary>How the AI response was read</summary>
+        <pre id="ai-reading"></pre>
+      </details>
+    </details>
     <fieldset class="options">
       <legend class="sr-only">Conversion options (defaults of IFC2DXF 0.4.0)</legend>
       <label class="check"><input type="checkbox" id="o-axes_3d"> 3D axes with real elevation
@@ -126,12 +142,12 @@
     </fieldset>
   </section>
 
-  <!-- 4. Convert -->
+  <!-- 4. Generate DXF -->
   <section class="card" aria-labelledby="h4-run" id="run-card">
-    <h2 id="h4-run"><span class="step" aria-hidden="true">4</span> Convert</h2>
+    <h2 id="h4-run"><span class="step" aria-hidden="true">4</span> Generate DXF</h2>
     <div class="run-row">
       <button id="convert" class="btn primary" type="button" disabled>
-        <span class="i i-play" aria-hidden="true"></span><span>Convert to DXF</span>
+        <span class="i i-play" aria-hidden="true"></span><span>Generate DXF</span>
       </button>
       <button id="cancel" class="btn ghost" type="button" disabled>
         <span class="i i-x" aria-hidden="true"></span><span>Cancel</span>
@@ -150,7 +166,14 @@
         <pre id="report"></pre>
       </details>
     </div>
-  </section>
+</section>
+</div>
+
+<!-- BOQ Dashboard viewer (same site; data arrives by postMessage, nothing is loaded from other servers) -->
+<section class="viewer" aria-label="BOQ Dashboard">
+  <p id="boq-empty" class="boq-empty">Load an IFC and click BOQ Dashboard to see quantities here.</p>
+  <iframe id="boq-frame" src="boq/viewer.html" title="BOQ Dashboard" hidden></iframe>
+</section>
 </main>
 
 <footer class="foot">
@@ -159,6 +182,7 @@
   <p>IFC2DXF web <span id="app-version"></span> · conversion engine ifc2dxf <span id="engine-version">0.4.0</span> ·
     <a href="licences.html">Licences and third-party software</a></p>
 </footer>
+<script src="boq/standalone.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
